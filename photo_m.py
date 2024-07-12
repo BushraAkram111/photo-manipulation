@@ -7,7 +7,7 @@ from torchvision import models, transforms
 from streamlit_cropper import st_cropper
 
 def main():
-    st.title("Photo Manipulation Classifer")
+    st.title("Photo Manipulation and Classifer")
     st.sidebar.title("Options")
     option = st.sidebar.selectbox("Choose an Action", ["Upload Image", "Resize", "Crop", "Rotate", "Apply Filter", "Add Text", "Draw Shapes", "Classify Image"])
 
