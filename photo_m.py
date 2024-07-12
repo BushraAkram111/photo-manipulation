@@ -4,6 +4,7 @@ import io
 import requests
 import torch
 from torchvision import models, transforms
+from streamlit_cropper import st_cropper
 
 def main():
     st.title("Photo Manipulation Classifer")
@@ -80,6 +81,7 @@ def apply_filter():
 
     st.subheader("Apply Filter to the Image")
     filter_type = st.selectbox("Select a Filter", ["BLUR", "CONTOUR", "DETAIL", "EDGE_ENHANCE", "SHARPEN"])
+    radius = None  # Initialize radius variable
     if filter_type == "BLUR":
         radius = st.slider("Blur Radius", 0, 20, 2)
     preview_image = apply_image_filter(st.session_state.image, filter_type, radius if filter_type == "BLUR" else None)
@@ -119,7 +121,7 @@ def add_text_to_image(image, text, position, font_size):
     try:
         font = ImageFont.truetype("arial.ttf", font_size)
     except IOError:
-        font = ImageFont.load_default()
+        font = ImageFont.load_default()  # Fallback to default font
     draw.text(position, text, font=font, fill=(255, 0, 0))
     return image
 
@@ -129,35 +131,41 @@ def draw_shapes():
         return
 
     st.subheader("Draw Shapes on the Image")
-    shape = st.selectbox("Select Shape", ["rectangle", "ellipse", "line"])
-    color = st.color_picker("Select Color", "#FF0000")
+    shape_type = st.selectbox("Choose Shape", ["Rectangle", "Ellipse", "Line"])
+    if shape_type == "Rectangle":
+        x1, y1, x2, y2 = st.slider("Select Rectangle Coordinates", 0, st.session_state.image.width, (10, 10, 100, 100))
+        if st.button("Draw Rectangle"):
+            st.session_state.image = draw_rectangle_on_image(st.session_state.image, (x1, y1, x2, y2))
+            st.image(st.session_state.image, caption='Image with Rectangle', use_column_width=True)
+            st.download_button("Download Image with Rectangle", image_to_bytes(st.session_state.image), "rectangle_image.jpg", "image/jpeg")
 
-    if shape in ["rectangle", "ellipse"]:
-        left = st.number_input("Left", 0, st.session_state.image.width, 0)
-        top = st.number_input("Top", 0, st.session_state.image.height, 0)
-        right = st.number_input("Right", 0, st.session_state.image.width, st.session_state.image.width)
-        bottom = st.number_input("Bottom", 0, st.session_state.image.height, st.session_state.image.height)
-        position = (left, top, right, bottom)
-    else:
-        x1 = st.number_input("Start X", 0, st.session_state.image.width, 0)
-        y1 = st.number_input("Start Y", 0, st.session_state.image.height, 0)
-        x2 = st.number_input("End X", 0, st.session_state.image.width, st.session_state.image.width)
-        y2 = st.number_input("End Y", 0, st.session_state.image.height, st.session_state.image.height)
-        position = (x1, y1, x2, y2)
+    elif shape_type == "Ellipse":
+        x1, y1, x2, y2 = st.slider("Select Ellipse Coordinates", 0, st.session_state.image.width, (10, 10, 100, 100))
+        if st.button("Draw Ellipse"):
+            st.session_state.image = draw_ellipse_on_image(st.session_state.image, (x1, y1, x2, y2))
+            st.image(st.session_state.image, caption='Image with Ellipse', use_column_width=True)
+            st.download_button("Download Image with Ellipse", image_to_bytes(st.session_state.image), "ellipse_image.jpg", "image/jpeg")
 
-    if st.button("Draw Shape"):
-        st.session_state.image = draw_shape_on_image(st.session_state.image, shape, position, color)
-        st.image(st.session_state.image, caption='Image with Shape', use_column_width=True)
-        st.download_button("Download Image with Shape", image_to_bytes(st.session_state.image), "shape_image.jpg", "image/jpeg")
+    elif shape_type == "Line":
+        x1, y1, x2, y2 = st.slider("Select Line Coordinates", 0, st.session_state.image.width, (10, 10, 100, 100))
+        if st.button("Draw Line"):
+            st.session_state.image = draw_line_on_image(st.session_state.image, (x1, y1, x2, y2))
+            st.image(st.session_state.image, caption='Image with Line', use_column_width=True)
+            st.download_button("Download Image with Line", image_to_bytes(st.session_state.image), "line_image.jpg", "image/jpeg")
 
-def draw_shape_on_image(image, shape, position, color):
+def draw_rectangle_on_image(image, box):
     draw = ImageDraw.Draw(image)
-    if shape == 'rectangle':
-        draw.rectangle(position, outline=color, width=3)
-    elif shape == 'ellipse':
-        draw.ellipse(position, outline=color, width=3)
-    elif shape == 'line':
-        draw.line(position, fill=color, width=3)
+    draw.rectangle(box, outline="red", width=5)
+    return image
+
+def draw_ellipse_on_image(image, box):
+    draw = ImageDraw.Draw(image)
+    draw.ellipse(box, outline="blue", width=5)
+    return image
+
+def draw_line_on_image(image, box):
+    draw = ImageDraw.Draw(image)
+    draw.line((box[0], box[1], box[2], box[3]), fill="green", width=5)
     return image
 
 def classify_image():
@@ -166,46 +174,24 @@ def classify_image():
         return
 
     st.subheader("Classify the Image")
-    st.image(st.session_state.image, caption='Image to Classify', use_column_width=True)
-
-    # Define the transformation for the image
+    model = models.resnet18(pretrained=True)
+    model.eval()
     preprocess = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-
-    # Load the pre-trained ResNet-50 model
-    model = models.resnet50(pretrained=True)
-    model.eval()
-
-    # Transform the image and get predictions
-    input_image = preprocess(st.session_state.image).unsqueeze(0)
+    input_image = preprocess(st.session_state.image)
+    input_batch = input_image.unsqueeze(0)
     with torch.no_grad():
-        outputs = model(input_image)
-        probabilities = torch.nn.functional.softmax(outputs[0], dim=0)
-
-    # Fetch the class labels
-    labels_url = 'https://raw.githubusercontent.com/anishathalye/imagenet-simple-labels/master/imagenet-simple-labels.json'
-    labels = requests.get(labels_url).json()
-
-    # Get top 5 predictions
-    top5_prob, top5_catid = torch.topk(probabilities, 5)
-    st.write("Top 5 Predictions:")
-    for i in range(top5_prob.size(0)):
-        label = labels[top5_catid[i].item()]
-        probability = top5_prob[i].item()
-        st.write(f"{label}: {probability:.4f}")
-
-    # Add a download button for the classified image
-    st.download_button("Download Classified Image", image_to_bytes(st.session_state.image), "classified_image.jpg", "image/jpeg")
+        output = model(input_batch)
+    st.write("Classification result:", output.argmax().item())
 
 def image_to_bytes(image):
-    """Convert PIL image to bytes."""
-    buffered = io.BytesIO()
-    image.save(buffered, format="JPEG")
-    return buffered.getvalue()
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='JPEG')
+    return img_byte_arr.getvalue()
 
 if __name__ == "__main__":
     main()
