@@ -1,2 +1,5 @@
 # Example packages
 numpy==1.24.2
+python3-pip
+python3-dev
+build-essential
