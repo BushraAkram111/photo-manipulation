@@ -5,9 +5,19 @@ import requests
 import torch
 from torchvision import models, transforms
 from streamlit_cropper import st_cropper
+import json
+
+# Load ImageNet class labels
+def load_imagenet_labels():
+    url = "https://raw.githubusercontent.com/anishathalye/imagenet-simple-labels/master/imagenet-simple-labels.json"
+    response = requests.get(url)
+    return response.json()
+
+# Global variables
+labels = load_imagenet_labels()
 
 def main():
-    st.title("Photo Manipulation and Classifer")
+    st.title("Photo Manipulation and Classifier")
     st.sidebar.title("Options")
     option = st.sidebar.selectbox("Choose an Action", ["Upload Image", "Resize", "Crop", "Rotate", "Apply Filter", "Add Text", "Draw Shapes", "Classify Image"])
 
@@ -182,16 +192,21 @@ def classify_image():
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-    input_image = preprocess(st.session_state.image)
-    input_batch = input_image.unsqueeze(0)
+
+    image = st.session_state.image
+    image_tensor = preprocess(image).unsqueeze(0)
     with torch.no_grad():
-        output = model(input_batch)
-    st.write("Classification result:", output.argmax().item())
+        outputs = model(image_tensor)
+    _, predicted_idx = torch.max(outputs, 1)
+    predicted_class = labels[predicted_idx.item()]
+
+    st.write(f"Predicted Class: {predicted_class}")
 
 def image_to_bytes(image):
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format='JPEG')
-    return img_byte_arr.getvalue()
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG")
+    buffer.seek(0)
+    return buffer.getvalue()
 
 if __name__ == "__main__":
     main()
