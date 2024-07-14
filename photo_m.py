@@ -5,7 +5,6 @@ import requests
 import torch
 from torchvision import models, transforms
 from streamlit_cropper import st_cropper
-import json
 
 # Load ImageNet class labels
 def load_imagenet_labels():
@@ -186,27 +185,44 @@ def classify_image():
     st.subheader("Classify the Image")
     model = models.resnet18(pretrained=True)
     model.eval()
+    
     preprocess = transforms.Compose([
         transforms.Resize(256),
         transforms.CenterCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-
+    
     image = st.session_state.image
     image_tensor = preprocess(image).unsqueeze(0)
+    
     with torch.no_grad():
         outputs = model(image_tensor)
+    
+    # Get the predicted class index
     _, predicted_idx = torch.max(outputs, 1)
+    
+    # Get the predicted class label and confidence score
     predicted_class = labels[predicted_idx.item()]
-
+    confidence = torch.nn.functional.softmax(outputs, dim=1)[0][predicted_idx].item()
+    
     st.write(f"Predicted Class: {predicted_class}")
+    st.write(f"Confidence Score: {confidence:.2f}")
+
+    # Show top 5 predictions
+    top5_prob, top5_catid = torch.topk(outputs, 5)
+    top5_prob = torch.nn.functional.softmax(top5_prob, dim=1)[0]
+    top5_labels = [labels[catid] for catid in top5_catid[0]]
+    top5_probs = [prob.item() for prob in top5_prob]
+    
+    st.write("Top 5 Predictions:")
+    for i in range(5):
+        st.write(f"{top5_labels[i]}: {top5_probs[i]:.2f}")
 
 def image_to_bytes(image):
-    buffer = io.BytesIO()
-    image.save(buffer, format="JPEG")
-    buffer.seek(0)
-    return buffer.getvalue()
+    with io.BytesIO() as buffer:
+        image.save(buffer, format="JPEG")
+        return buffer.getvalue()
 
 if __name__ == "__main__":
     main()
